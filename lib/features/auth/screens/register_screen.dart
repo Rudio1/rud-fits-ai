@@ -1,6 +1,10 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'package:rud_fits_ai/core/animations/motion_tokens.dart';
+import 'package:rud_fits_ai/core/haptics/app_haptics.dart';
 import 'package:rud_fits_ai/services/auth_api_service.dart';
 import 'package:rud_fits_ai/themes/themes.dart';
 
@@ -13,7 +17,7 @@ class RegisterScreen extends StatefulWidget {
   State<RegisterScreen> createState() => _RegisterScreenState();
 }
 
-class _RegisterScreenState extends State<RegisterScreen> {
+class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProviderStateMixin {
   _RegisterStep _step = _RegisterStep.fullName;
   String? _fieldError;
   bool _busy = false;
@@ -30,11 +34,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   bool _obscurePassword = true;
 
+  late final AnimationController _shakeController;
+
   int get _stepIndex => _step.index;
 
   @override
   void initState() {
     super.initState();
+    _shakeController = AnimationController(vsync: this, duration: MotionTokens.normal);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _focusForStep(_step);
     });
@@ -42,6 +49,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   @override
   void dispose() {
+    _shakeController.dispose();
     _fullNameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
@@ -67,6 +75,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _focusForStep(step);
     });
+  }
+
+  Future<void> _shake() async {
+    await _shakeController.forward(from: 0);
+    _shakeController.reset();
   }
 
   String? _validateFullName() {
@@ -112,6 +125,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     final err = _validateCurrent();
     if (err != null) {
       setState(() => _fieldError = err);
+      _shake();
       return;
     }
     setState(() => _fieldError = null);
@@ -138,10 +152,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
     setState(() => _busy = false);
 
     if (result.ok) {
+      await AppHaptics.success();
+      if (!mounted) return;
       Navigator.of(context).pop(true);
       return;
     }
 
+    await AppHaptics.error();
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(result.message ?? 'Não foi possível criar a conta.')),
     );
@@ -179,57 +197,68 @@ class _RegisterScreenState extends State<RegisterScreen> {
               ),
             ),
             Expanded(
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  return SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(horizontal: 28),
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(minHeight: constraints.maxHeight - 48),
-                      child: Center(
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 400),
-                          child: AnimatedSwitcher(
-                            duration: const Duration(milliseconds: 280),
-                            switchInCurve: Curves.easeOutCubic,
-                            switchOutCurve: Curves.easeInCubic,
-                            transitionBuilder: (child, animation) {
-                              return FadeTransition(
-                                opacity: animation,
-                                child: SlideTransition(
-                                  position: Tween<Offset>(
-                                    begin: const Offset(0, 0.06),
-                                    end: Offset.zero,
-                                  ).animate(animation),
-                                  child: child,
-                                ),
-                              );
-                            },
-                            child: _StepContent(
-                              key: ValueKey(_step),
-                              step: _step,
-                              theme: theme,
-                              busy: _busy,
-                              fullNameController: _fullNameController,
-                              emailController: _emailController,
-                              passwordController: _passwordController,
-                              usernameController: _usernameController,
-                              fullNameFocus: _fullNameFocus,
-                              emailFocus: _emailFocus,
-                              passwordFocus: _passwordFocus,
-                              usernameFocus: _usernameFocus,
-                              obscurePassword: _obscurePassword,
-                              onTogglePassword: () => setState(() => _obscurePassword = !_obscurePassword),
-                              fieldError: _fieldError,
-                              onContinue: _continue,
-                              stepIndex: _stepIndex,
-                              stepCount: _RegisterStep.values.length,
+              child: AnimatedBuilder(
+                animation: _shakeController,
+                builder: (context, child) {
+                  final offset = math.sin(_shakeController.value * math.pi * 4) * 7.0;
+                  return Transform.translate(
+                    offset: Offset(offset, 0),
+                    child: child,
+                  );
+                },
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    return SingleChildScrollView(
+                      padding: const EdgeInsets.symmetric(horizontal: 28),
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(minHeight: constraints.maxHeight - 48),
+                        child: Center(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 400),
+                            child: AnimatedSwitcher(
+                              duration: MotionTokens.medium,
+                              switchInCurve: Curves.easeOutCubic,
+                              switchOutCurve: Curves.easeInCubic,
+                              transitionBuilder: (child, animation) {
+                                return FadeTransition(
+                                  opacity: animation,
+                                  child: SlideTransition(
+                                    position: Tween<Offset>(
+                                      begin: const Offset(0, 0.06),
+                                      end: Offset.zero,
+                                    ).animate(animation),
+                                    child: child,
+                                  ),
+                                );
+                              },
+                              child: _StepContent(
+                                key: ValueKey(_step),
+                                step: _step,
+                                theme: theme,
+                                busy: _busy,
+                                fullNameController: _fullNameController,
+                                emailController: _emailController,
+                                passwordController: _passwordController,
+                                usernameController: _usernameController,
+                                fullNameFocus: _fullNameFocus,
+                                emailFocus: _emailFocus,
+                                passwordFocus: _passwordFocus,
+                                usernameFocus: _usernameFocus,
+                                obscurePassword: _obscurePassword,
+                                onTogglePassword: () =>
+                                    setState(() => _obscurePassword = !_obscurePassword),
+                                fieldError: _fieldError,
+                                onContinue: _continue,
+                                stepIndex: _stepIndex,
+                                stepCount: _RegisterStep.values.length,
+                              ),
                             ),
                           ),
                         ),
                       ),
-                    ),
-                  );
-                },
+                    );
+                  },
+                ),
               ),
             ),
           ],
@@ -303,7 +332,8 @@ class _StepContent extends StatelessWidget {
             return Padding(
               padding: const EdgeInsets.symmetric(horizontal: 3),
               child: AnimatedContainer(
-                duration: const Duration(milliseconds: 220),
+                duration: MotionTokens.normal,
+                curve: MotionTokens.enter,
                 width: active ? 20 : 6,
                 height: 6,
                 decoration: BoxDecoration(
@@ -368,7 +398,11 @@ class _StepContent extends StatelessWidget {
                 errorText: fieldError,
                 suffixIcon: IconButton(
                   onPressed: busy ? null : onTogglePassword,
-                  icon: Icon(obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined),
+                  icon: Icon(
+                    obscurePassword
+                        ? Icons.visibility_outlined
+                        : Icons.visibility_off_outlined,
+                  ),
                 ),
               ),
               onSubmitted: (_) => onContinue(),
@@ -399,7 +433,10 @@ class _StepContent extends StatelessWidget {
               ? const SizedBox(
                   height: 22,
                   width: 22,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.buttonText),
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: AppColors.buttonText,
+                  ),
                 )
               : Text(_isLast ? 'Criar conta' : 'Continuar'),
         ),
