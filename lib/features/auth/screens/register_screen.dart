@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import 'package:rud_fits_ai/core/animations/motion_tokens.dart';
 import 'package:rud_fits_ai/core/haptics/app_haptics.dart';
+import 'package:rud_fits_ai/core/icons/app_icons.dart';
 import 'package:rud_fits_ai/services/auth_api_service.dart';
 import 'package:rud_fits_ai/themes/themes.dart';
 
@@ -192,7 +193,7 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
               alignment: Alignment.centerLeft,
               child: IconButton(
                 onPressed: _back,
-                icon: const Icon(Icons.arrow_back_ios_new_rounded),
+                icon: const Icon(AppIcons.caretLeft),
                 color: AppColors.textSecondary,
               ),
             ),
@@ -400,8 +401,8 @@ class _StepContent extends StatelessWidget {
                   onPressed: busy ? null : onTogglePassword,
                   icon: Icon(
                     obscurePassword
-                        ? Icons.visibility_outlined
-                        : Icons.visibility_off_outlined,
+                        ? AppIcons.eye
+                        : AppIcons.eyeSlash,
                   ),
                 ),
               ),

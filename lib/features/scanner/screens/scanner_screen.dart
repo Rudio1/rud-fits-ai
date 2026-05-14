@@ -8,14 +8,18 @@ import 'package:image_picker/image_picker.dart';
 import 'package:rud_fits_ai/core/animations/app_transitions.dart';
 import 'package:rud_fits_ai/core/animations/motion_tokens.dart';
 import 'package:rud_fits_ai/core/haptics/app_haptics.dart';
+import 'package:rud_fits_ai/core/icons/app_icons.dart';
 import 'package:rud_fits_ai/features/scanner/screens/confirm_meal_screen.dart';
 import 'package:rud_fits_ai/features/scanner/widgets/analyzing_overlay.dart';
 import 'package:rud_fits_ai/features/scanner/widgets/scanner_frame.dart';
+import 'package:rud_fits_ai/models/meal_type.dart';
 import 'package:rud_fits_ai/services/meal_log_api_service.dart';
 import 'package:rud_fits_ai/themes/themes.dart';
 
 class ScannerScreen extends StatefulWidget {
-  const ScannerScreen({super.key});
+  const ScannerScreen({super.key, required this.mealType});
+
+  final MealType mealType;
 
   @override
   State<ScannerScreen> createState() => _ScannerScreenState();
@@ -27,6 +31,7 @@ class _ScannerScreenState extends State<ScannerScreen>
   Future<void>? _initFuture;
   String? _initError;
   bool _analyzing = false;
+  File? _analyzingImage;
   FlashMode _flashMode = FlashMode.off;
 
   @override
@@ -121,16 +126,24 @@ class _ScannerScreenState extends State<ScannerScreen>
     }
 
     AppHaptics.selection();
-    setState(() => _analyzing = true);
 
     try {
       final picture = await controller.takePicture();
-      await _analyzeImage(File(picture.path));
+      final file = File(picture.path);
+      if (!mounted) return;
+      setState(() {
+        _analyzing = true;
+        _analyzingImage = file;
+      });
+      await _analyzeImage(file);
     } catch (_) {
       if (!mounted) return;
       await AppHaptics.error();
       if (!mounted) return;
-      setState(() => _analyzing = false);
+      setState(() {
+        _analyzing = false;
+        _analyzingImage = null;
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Erro ao capturar a foto.')),
       );
@@ -151,14 +164,20 @@ class _ScannerScreenState extends State<ScannerScreen>
       );
 
       if (picked == null || !mounted) return;
-
-      setState(() => _analyzing = true);
-      await _analyzeImage(File(picked.path));
+      final file = File(picked.path);
+      setState(() {
+        _analyzing = true;
+        _analyzingImage = file;
+      });
+      await _analyzeImage(file);
     } catch (_) {
       if (!mounted) return;
       await AppHaptics.error();
       if (!mounted) return;
-      setState(() => _analyzing = false);
+      setState(() {
+        _analyzing = false;
+        _analyzingImage = null;
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Erro ao abrir a galeria.')),
       );
@@ -173,7 +192,10 @@ class _ScannerScreenState extends State<ScannerScreen>
     if (!analyzed.ok) {
       await AppHaptics.error();
       if (!mounted) return;
-      setState(() => _analyzing = false);
+      setState(() {
+        _analyzing = false;
+        _analyzingImage = null;
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(analyzed.error ?? 'Erro ao analisar a foto.'),
@@ -191,7 +213,10 @@ class _ScannerScreenState extends State<ScannerScreen>
     if (!estimated.ok) {
       await AppHaptics.error();
       if (!mounted) return;
-      setState(() => _analyzing = false);
+      setState(() {
+        _analyzing = false;
+        _analyzingImage = null;
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(estimated.error ?? 'Erro ao estimar a nutrição.'),
@@ -204,7 +229,10 @@ class _ScannerScreenState extends State<ScannerScreen>
     if (!mounted) return;
     await Navigator.of(context).pushReplacement(
       AppTransitions.slideFromRight(
-        page: ConfirmMealScreen(meal: estimated.meal!),
+        page: ConfirmMealScreen(
+          meal: estimated.meal!,
+          initialMealType: widget.mealType,
+        ),
       ),
     );
   }
@@ -217,7 +245,11 @@ class _ScannerScreenState extends State<ScannerScreen>
       body: Stack(
         fit: StackFit.expand,
         children: [
-          if (_initError != null)
+          if (_analyzing && _analyzingImage != null)
+            Positioned.fill(
+              child: AiMealPhotoScanOverlay(imageFile: _analyzingImage!),
+            )
+          else if (_initError != null)
             _CameraErrorView(message: _initError!, onRetry: () {
               setState(() {
                 _initError = null;
@@ -242,32 +274,32 @@ class _ScannerScreenState extends State<ScannerScreen>
                 );
               },
             ),
-          SafeArea(
-            child: Column(
-              children: [
-                _TopBar(
-                  flashMode: _flashMode,
-                  onClose: () => Navigator.of(context).maybePop(),
-                  onToggleFlash:
-                      _controller?.value.isInitialized == true && !_analyzing
-                          ? _toggleFlash
-                          : null,
-                ),
-                const Spacer(),
-                _Hint(),
-                const SizedBox(height: 16),
-                _CaptureBar(
-                  enabled: _controller?.value.isInitialized == true &&
-                      _initError == null &&
-                      !_analyzing,
-                  onCapture: _capture,
-                  onGallery: _analyzing ? null : _pickFromGallery,
-                ),
-                const SizedBox(height: 16),
-              ],
+          if (!(_analyzing && _analyzingImage != null))
+            SafeArea(
+              child: Column(
+                children: [
+                  _TopBar(
+                    flashMode: _flashMode,
+                    onClose: () => Navigator.of(context).maybePop(),
+                    onToggleFlash:
+                        _controller?.value.isInitialized == true && !_analyzing
+                            ? _toggleFlash
+                            : null,
+                  ),
+                  const Spacer(),
+                  _Hint(),
+                  const SizedBox(height: 16),
+                  _CaptureBar(
+                    enabled: _controller?.value.isInitialized == true &&
+                        _initError == null &&
+                        !_analyzing,
+                    onCapture: _capture,
+                    onGallery: _analyzing ? null : _pickFromGallery,
+                  ),
+                  const SizedBox(height: 16),
+                ],
+              ),
             ),
-          ),
-          if (_analyzing) const AnalyzingOverlay(),
         ],
       ),
     );
@@ -343,12 +375,12 @@ class _TopBar extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
       child: Row(
         children: [
-          _IconButton(icon: Icons.close_rounded, onTap: onClose),
+          _IconButton(icon: AppIcons.x, onTap: onClose),
           const Spacer(),
           _IconButton(
             icon: flashMode == FlashMode.torch
-                ? Icons.flash_on_rounded
-                : Icons.flash_off_rounded,
+                ? AppIcons.flashlight
+                : AppIcons.flashlightOff,
             onTap: onToggleFlash,
             active: flashMode == FlashMode.torch,
           ),
@@ -409,7 +441,7 @@ class _Hint extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           const Icon(
-            Icons.auto_awesome_rounded,
+            AppIcons.sparkle,
             color: AppColors.primaryGreen,
             size: 16,
           ),
@@ -485,7 +517,7 @@ class _CaptureBar extends StatelessWidget {
                         : AppColors.primaryGreen.withValues(alpha: 0.4),
                   ),
                   child: const Icon(
-                    Icons.camera_alt_rounded,
+                    AppIcons.camera,
                     color: Colors.white,
                     size: 28,
                   ),
@@ -524,7 +556,7 @@ class _GalleryButton extends StatelessWidget {
             ),
           ),
           child: Icon(
-            Icons.photo_library_rounded,
+            AppIcons.images,
             color: Colors.white.withValues(alpha: enabled ? 0.95 : 0.4),
             size: 22,
           ),
@@ -575,7 +607,7 @@ class _CameraErrorView extends StatelessWidget {
                 color: AppColors.error.withValues(alpha: 0.12),
               ),
               child: const Icon(
-                Icons.no_photography_rounded,
+                AppIcons.cameraSlash,
                 color: AppColors.error,
                 size: 32,
               ),
@@ -599,7 +631,7 @@ class _CameraErrorView extends StatelessWidget {
             const SizedBox(height: 28),
             ElevatedButton.icon(
               onPressed: onRetry,
-              icon: const Icon(Icons.refresh_rounded, size: 18),
+              icon: const Icon(AppIcons.arrowClockwise, size: 18),
               label: const Text('Tentar novamente'),
             ),
             const SizedBox(height: 8),

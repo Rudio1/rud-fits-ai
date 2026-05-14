@@ -1,11 +1,19 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
+import 'package:rud_fits_ai/core/animations/app_transitions.dart';
 import 'package:rud_fits_ai/core/animations/motion_tokens.dart';
 import 'package:rud_fits_ai/core/calendar_today.dart';
 import 'package:rud_fits_ai/core/haptics/app_haptics.dart';
+import 'package:rud_fits_ai/core/icons/app_icons.dart';
+import 'package:rud_fits_ai/features/meal_logs/meal_log_format.dart';
+import 'package:rud_fits_ai/features/meal_logs/screens/meal_log_detail_screen.dart';
+import 'package:rud_fits_ai/features/meal_logs/widgets/ai_meal_cta_card.dart';
+import 'package:rud_fits_ai/features/scanner/screens/ai_scan_meal_type_screen.dart';
 import 'package:rud_fits_ai/models/day_meal_log.dart';
+import 'package:rud_fits_ai/models/meal_type.dart';
 import 'package:rud_fits_ai/services/meal_log_api_service.dart';
 import 'package:rud_fits_ai/themes/themes.dart';
+import 'package:rud_fits_ai/widgets/meal_type_lead_visual.dart';
 
 class DailyMealsScreen extends StatefulWidget {
   const DailyMealsScreen({super.key, this.refreshToken = 0});
@@ -86,30 +94,49 @@ class _DailyMealsScreenState extends State<DailyMealsScreen> {
     });
   }
 
-  void _shiftDay(int delta) {
-    final next = _day.add(Duration(days: delta));
-    if (next.isAfter(_todayOnly)) return;
+  Future<void> _openScanner() async {
     AppHaptics.selection();
+    await Navigator.of(context).push(
+      AppTransitions.slideFromRight(page: const AiScanMealTypeScreen()),
+    );
+    if (mounted) await _fetch();
+  }
+
+  Future<void> _pickDay() async {
+    AppHaptics.selection();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _day.isAfter(_todayOnly) ? _todayOnly : _day,
+      firstDate: DateTime(2020),
+      lastDate: _todayOnly,
+      locale: const Locale('pt', 'BR'),
+      helpText: 'Selecionar data',
+      cancelText: 'Cancelar',
+      confirmText: 'Confirmar',
+      builder: (context, child) {
+        final base = Theme.of(context);
+        return Theme(
+          data: base.copyWith(
+            colorScheme: base.colorScheme.copyWith(
+              primary: AppColors.mealsSummaryDeep,
+              onPrimary: AppColors.textPrimary,
+              surface: AppColors.card,
+              onSurface: AppColors.textPrimary,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked == null || !mounted) return;
+    final next = CalendarToday.dateOnlyLocal(picked);
+    if (next.isAfter(_todayOnly)) return;
     setState(() => _day = next);
     _fetch();
   }
 
   String _formatHeaderDate() {
     return '${_day.day} de ${_monthsPt[_day.month - 1]} de ${_day.year}';
-  }
-
-  String _formatTime(DateTime? dt) {
-    if (dt == null) return '—';
-    final h = dt.hour.toString().padLeft(2, '0');
-    final m = dt.minute.toString().padLeft(2, '0');
-    return '$h:$m';
-  }
-
-  String _quantityLabel(DayMealLogItem item) {
-    if (item.unitType == 1) {
-      return '${item.quantity} g';
-    }
-    return '${item.quantity} u.';
   }
 
   List<DayMealLogEntry> _sortedLogs() {
@@ -152,40 +179,65 @@ class _DailyMealsScreenState extends State<DailyMealsScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
-              child: Row(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+              child: Column(
                 children: [
-                  IconButton(
-                    onPressed: () => _shiftDay(-1),
-                    icon: const Icon(Icons.chevron_left_rounded),
-                    color: AppColors.textPrimary,
-                  ),
-                  Expanded(
-                    child: Column(
-                      children: [
-                        Text(
-                          'Refeições do dia',
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          _formatHeaderDate(),
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                      ],
+                  Text(
+                    'Refeições',
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w800,
                     ),
+                    textAlign: TextAlign.center,
                   ),
-                  IconButton(
-                    onPressed: _day.isBefore(_todayOnly) ? () => _shiftDay(1) : null,
-                    icon: const Icon(Icons.chevron_right_rounded),
-                    color: AppColors.textPrimary,
+                  const SizedBox(height: 6),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Expanded(
+                        child: Tooltip(
+                          message: 'Escolher data',
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap: _pickDay,
+                              borderRadius: BorderRadius.circular(12),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 8,
+                                ),
+                                child: Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Text(
+                                    _formatHeaderDate(),
+                                    style: theme.textTheme.bodyMedium?.copyWith(
+                                      color: AppColors.textSecondary,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: _pickDay,
+                        tooltip: 'Escolher data',
+                        icon: Icon(
+                          AppIcons.calendar,
+                          size: 24,
+                          color: AppColors.mealsSummaryAccent,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 10, 20, 12),
+              child: AiMealCtaCard(onTap: _openScanner),
             ),
             Expanded(
               child: AnimatedSwitcher(
@@ -205,8 +257,6 @@ class _DailyMealsScreenState extends State<DailyMealsScreen> {
                             dayProtein: _dayTotalProtein(),
                             dayCarbs: _dayTotalCarbs(),
                             dayFat: _dayTotalFat(),
-                            formatTime: _formatTime,
-                            quantityLabel: _quantityLabel,
                             onRefresh: _onRefresh,
                           ),
               ),
@@ -288,7 +338,7 @@ class _ErrorBody extends StatelessWidget {
                       color: AppColors.error.withValues(alpha: 0.1),
                     ),
                     child: const Icon(
-                      Icons.cloud_off_rounded,
+                      AppIcons.cloudSlash,
                       color: AppColors.error,
                       size: 28,
                     ),
@@ -312,7 +362,7 @@ class _ErrorBody extends StatelessWidget {
                   const SizedBox(height: 24),
                   ElevatedButton.icon(
                     onPressed: onRetry,
-                    icon: const Icon(Icons.refresh_rounded, size: 18),
+                    icon: const Icon(AppIcons.arrowClockwise, size: 18),
                     label: const Text('Tentar novamente'),
                   ),
                 ],
@@ -333,8 +383,6 @@ class _MealsBody extends StatelessWidget {
     required this.dayProtein,
     required this.dayCarbs,
     required this.dayFat,
-    required this.formatTime,
-    required this.quantityLabel,
     required this.onRefresh,
   });
 
@@ -343,13 +391,12 @@ class _MealsBody extends StatelessWidget {
   final double dayProtein;
   final double dayCarbs;
   final double dayFat;
-  final String Function(DateTime?) formatTime;
-  final String Function(DayMealLogItem) quantityLabel;
   final Future<void> Function() onRefresh;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final bottomInset = MediaQuery.of(context).padding.bottom;
 
     if (logs.isEmpty) {
       return RefreshIndicator(
@@ -359,10 +406,10 @@ class _MealsBody extends StatelessWidget {
         child: CustomScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
-                child: _DaySummaryCard(
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
+              sliver: SliverToBoxAdapter(
+                child: _DayHeroSummary(
                   kcal: 0,
                   protein: 0,
                   carbs: 0,
@@ -370,41 +417,54 @@ class _MealsBody extends StatelessWidget {
                 ),
               ),
             ),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 22, 20, 8),
+                child: _SectionHeader(count: 0),
+              ),
+            ),
             SliverFillRemaining(
               hasScrollBody: false,
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 32),
+                padding: EdgeInsets.fromLTRB(32, 0, 32, 24 + bottomInset),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Container(
-                      width: 72,
-                      height: 72,
+                      width: 80,
+                      height: 80,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: AppColors.cardElevated,
+                        gradient: RadialGradient(
+                          colors: [
+                            AppColors.primaryGreen.withValues(alpha: 0.18),
+                            AppColors.cardElevated,
+                          ],
+                        ),
+                        border: Border.all(color: AppColors.borderDefault),
                       ),
                       child: const Icon(
-                        Icons.restaurant_rounded,
-                        size: 36,
+                        AppIcons.forkKnife,
+                        size: 38,
                         color: AppColors.lightGreen,
                       ),
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 22),
                     Text(
-                      'Nada registrado neste dia',
+                      'Nenhuma refeição neste dia',
                       textAlign: TextAlign.center,
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w700,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Suas refeições aparecerão aqui com calorias e macros por alimento.',
+                      'Toque em “Registrar refeição com IA” acima e use a câmera para incluir a primeira refeição do dia.',
                       textAlign: TextAlign.center,
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: AppColors.textSecondary,
-                        height: 1.45,
+                        height: 1.5,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
                   ],
@@ -421,31 +481,21 @@ class _MealsBody extends StatelessWidget {
       color: AppColors.primaryGreen,
       backgroundColor: AppColors.card,
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
+        padding: EdgeInsets.fromLTRB(20, 4, 20, 108 + bottomInset),
         children: [
-          _DaySummaryCard(
+          _DayHeroSummary(
             kcal: dayTotalKcal,
             protein: dayProtein,
             carbs: dayCarbs,
             fat: dayFat,
           ),
-          const SizedBox(height: 16),
-          Text(
-            '${logs.length} ${logs.length == 1 ? 'refeição' : 'refeições'}',
-            style: theme.textTheme.labelLarge?.copyWith(
-              color: AppColors.textSecondary,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 22),
+          _SectionHeader(count: logs.length),
+          const SizedBox(height: 14),
           ...logs.map(
             (e) => Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: _MealCard(
-                entry: e,
-                formatTime: formatTime,
-                quantityLabel: quantityLabel,
-              ),
+              padding: const EdgeInsets.only(bottom: 18),
+              child: _MealListCard(entry: e, onRefresh: onRefresh),
             ),
           ),
         ],
@@ -454,8 +504,215 @@ class _MealsBody extends StatelessWidget {
   }
 }
 
-class _DaySummaryCard extends StatelessWidget {
-  const _DaySummaryCard({
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader({required this.count});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final label = count == 0
+        ? 'Nenhuma refeição'
+        : count == 1
+            ? '1 refeição neste dia'
+            : '$count refeições neste dia';
+
+    return Row(
+      children: [
+        Container(
+          width: 4,
+          height: 22,
+          decoration: BoxDecoration(
+            color: AppColors.primaryGreen,
+            borderRadius: BorderRadius.circular(4),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.primaryGreen.withValues(alpha: 0.45),
+                blurRadius: 8,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            'Suas refeições',
+            style: theme.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          decoration: BoxDecoration(
+            color: AppColors.cardElevated,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: AppColors.borderDefault),
+          ),
+          child: Text(
+            label,
+            style: theme.textTheme.labelMedium?.copyWith(
+              color: AppColors.textSecondary,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _MealListCard extends StatelessWidget {
+  const _MealListCard({required this.entry, required this.onRefresh});
+
+  final DayMealLogEntry entry;
+  final Future<void> Function() onRefresh;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final t = MealLogFormat.consumedTime(entry.consumedAt);
+    final mealCategory = MealType.fromApiValue(entry.mealType);
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () async {
+          AppHaptics.selection();
+          final refresh = await Navigator.of(context).push<bool>(
+            AppTransitions.slideFromRight(
+              page: MealLogDetailScreen(meal: entry),
+            ),
+          );
+          if (!context.mounted) return;
+          if (refresh == true) await onRefresh();
+        },
+
+        borderRadius: BorderRadius.circular(22),
+        child: Ink(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(22),
+            color: AppColors.card,
+            border: Border.all(color: AppColors.borderDefault),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.22),
+                blurRadius: 14,
+                offset: const Offset(0, 5),
+              ),
+              BoxShadow(
+                color: AppColors.primaryGreen.withValues(alpha: 0.07),
+                blurRadius: 22,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 12, 16),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                MealTypeLeadVisual(
+                  mealType: mealCategory,
+                  size: 48,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        entry.name,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w800,
+                          height: 1.2,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                AppIcons.clock,
+                                size: 15,
+                                color: AppColors.textSecondary
+                                    .withValues(alpha: 0.95),
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                t,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: AppColors.textSecondary,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.primaryGreen
+                                  .withValues(alpha: 0.16),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: AppColors.primaryGreen
+                                    .withValues(alpha: 0.35),
+                              ),
+                            ),
+                            child: Text(
+                              '${entry.totalCalories} kcal',
+                              style: theme.textTheme.labelMedium?.copyWith(
+                                color: AppColors.primaryGreen,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Column(
+                    children: [
+                      Icon(
+                        AppIcons.caretRight,
+                        color: AppColors.textSecondary.withValues(alpha: 0.9),
+                        size: 28,
+                      ),
+                      Text(
+                        'Detalhes',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: AppColors.primaryGreen,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DayHeroSummary extends StatelessWidget {
+  const _DayHeroSummary({
     required this.kcal,
     required this.protein,
     required this.carbs,
@@ -470,17 +727,34 @@ class _DaySummaryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
       decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColors.borderDefault),
+        borderRadius: BorderRadius.circular(26),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppColors.card,
+            AppColors.mealsSummaryDeep.withValues(alpha: 0.14),
+            AppColors.cardElevated.withValues(alpha: 0.55),
+          ],
+          stops: const [0.0, 0.45, 1.0],
+        ),
+        border: Border.all(
+          color: AppColors.mealsSummaryAccent.withValues(alpha: 0.32),
+        ),
         boxShadow: [
           BoxShadow(
-            color: AppColors.primaryGreen.withValues(alpha: 0.06),
-            blurRadius: 20,
-            offset: const Offset(0, 6),
+            color: AppColors.mealsSummaryAccent.withValues(alpha: 0.12),
+            blurRadius: 28,
+            offset: const Offset(0, 10),
+          ),
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.35),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
           ),
         ],
       ),
@@ -490,260 +764,173 @@ class _DaySummaryCard extends StatelessWidget {
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(8),
+                padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: AppColors.primaryGreen.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(10),
+                  color:
+                      AppColors.mealsSummaryAccent.withValues(alpha: 0.16),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: AppColors.mealsSummaryAccent.withValues(alpha: 0.4),
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color:
+                          AppColors.mealsSummaryAccent.withValues(alpha: 0.14),
+                      blurRadius: 14,
+                    ),
+                  ],
                 ),
                 child: const Icon(
-                  Icons.local_fire_department_rounded,
-                  color: AppColors.primaryGreen,
-                  size: 20,
+                  AppIcons.chartLine,
+                  color: AppColors.mealsSummaryAccent,
+                  size: 22,
                 ),
               ),
-              const SizedBox(width: 10),
-              Text(
-                'Total do dia',
-                style: theme.textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w700,
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Resumo do dia',
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        color: AppColors.mealsSummaryAccent,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.4,
+                      ),
+                    ),
+                    Text(
+                      'Calorias e macros que você já registrou hoje',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: AppColors.textSecondary,
+                        height: 1.25,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 14),
-          Text(
-            '$kcal kcal',
-            style: theme.textTheme.headlineSmall?.copyWith(
-              fontWeight: FontWeight.w800,
-              color: AppColors.primaryGreen,
-            ),
-          ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 18),
           Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
             children: [
-              Expanded(
-                child: _MacroPill(
-                  label: 'P',
-                  value: protein,
-                  fractionDigits: 0,
+              Text(
+                '$kcal',
+                style: theme.textTheme.displaySmall?.copyWith(
+                  fontWeight: FontWeight.w900,
+                  color: AppColors.textPrimary,
+                  height: 1,
+                  letterSpacing: -0.5,
                 ),
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _MacroPill(
-                  label: 'C',
-                  value: carbs,
-                  fractionDigits: 1,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _MacroPill(
-                  label: 'G',
-                  value: fat,
-                  fractionDigits: 1,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MacroPill extends StatelessWidget {
-  const _MacroPill({
-    required this.label,
-    required this.value,
-    required this.fractionDigits,
-  });
-
-  final String label;
-  final double value;
-  final int fractionDigits;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
-      decoration: BoxDecoration(
-        color: AppColors.cardElevated,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.borderDefault),
-      ),
-      child: Column(
-        children: [
-          Text(
-            label,
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              const SizedBox(width: 6),
+              Text(
+                'kcal',
+                style: theme.textTheme.titleMedium?.copyWith(
                   color: AppColors.textSecondary,
                   fontWeight: FontWeight.w700,
                 ),
+              ),
+            ],
           ),
-          const SizedBox(height: 2),
-          Text(
-            '${value.toStringAsFixed(fractionDigits)} g',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MealCard extends StatelessWidget {
-  const _MealCard({
-    required this.entry,
-    required this.formatTime,
-    required this.quantityLabel,
-  });
-
-  final DayMealLogEntry entry;
-  final String Function(DateTime?) formatTime;
-  final String Function(DayMealLogItem) quantityLabel;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final t = formatTime(entry.consumedAt);
-
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColors.borderDefault),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Theme(
-        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-        child: ExpansionTile(
-          tilePadding: const EdgeInsets.fromLTRB(16, 4, 12, 4),
-          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
-          leading: Container(
-            width: 42,
-            height: 42,
+          const SizedBox(height: 20),
+          Container(
+            padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: AppColors.cardElevated,
-              borderRadius: BorderRadius.circular(12),
+              color: AppColors.background.withValues(alpha: 0.45),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: AppColors.borderDefault.withValues(alpha: 0.9),
+              ),
             ),
-            child: const Icon(
-              Icons.set_meal_rounded,
-              color: AppColors.lightGreen,
-              size: 22,
-            ),
-          ),
-          title: Text(
-            entry.name,
-            style: theme.textTheme.titleSmall?.copyWith(
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          subtitle: Padding(
-            padding: const EdgeInsets.only(top: 4),
             child: Row(
               children: [
-                Text(
-                  t,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: AppColors.textSecondary,
+                Expanded(
+                  child: _MacroSummaryCell(
+                    title: 'Proteína',
+                    value: protein,
+                    fractionDigits: 0,
+                    accent: AppColors.aiBlue,
                   ),
                 ),
-                const SizedBox(width: 8),
-                Container(
-                  width: 4,
-                  height: 4,
-                  decoration: const BoxDecoration(
-                    color: AppColors.textSecondary,
-                    shape: BoxShape.circle,
+                _MacroDivider(),
+                Expanded(
+                  child: _MacroSummaryCell(
+                    title: 'Carboidr.',
+                    value: carbs,
+                    fractionDigits: 1,
+                    accent: AppColors.accentSage,
                   ),
                 ),
-                const SizedBox(width: 8),
-                Text(
-                  '${entry.totalCalories} kcal',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: AppColors.primaryGreen,
-                    fontWeight: FontWeight.w600,
+                _MacroDivider(),
+                Expanded(
+                  child: _MacroSummaryCell(
+                    title: 'Gordura',
+                    value: fat,
+                    fractionDigits: 1,
+                    accent: AppColors.warning,
                   ),
                 ),
               ],
             ),
           ),
-          children: [
-            Text(
-              'Macros: P ${entry.totalProtein.toStringAsFixed(0)} g · '
-              'C ${entry.totalCarbs.toStringAsFixed(1)} g · '
-              'G ${entry.totalFat.toStringAsFixed(1)} g',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: AppColors.textSecondary,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Alimentos (${entry.items.length})',
-              style: theme.textTheme.labelLarge?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 8),
-            ...entry.items.map(
-              (item) => Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: AppColors.cardElevated,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.borderDefault),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              item.foodName,
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                          Text(
-                            '${item.calories} kcal',
-                            style: theme.textTheme.labelMedium?.copyWith(
-                              color: AppColors.primaryGreen,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        quantityLabel(item),
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'P ${item.protein.toStringAsFixed(0)} g · '
-                        'C ${item.carbs.toStringAsFixed(1)} g · '
-                        'G ${item.fat.toStringAsFixed(1)} g',
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
+        ],
       ),
     );
   }
 }
+
+class _MacroDivider extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 1,
+      height: 40,
+      margin: const EdgeInsets.symmetric(horizontal: 6),
+      color: AppColors.borderDefault,
+    );
+  }
+}
+
+class _MacroSummaryCell extends StatelessWidget {
+  const _MacroSummaryCell({
+    required this.title,
+    required this.value,
+    required this.fractionDigits,
+    required this.accent,
+  });
+
+  final String title;
+  final double value;
+  final int fractionDigits;
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Text(
+          title,
+          style: theme.textTheme.labelSmall?.copyWith(
+            color: AppColors.textSecondary,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          '${value.toStringAsFixed(fractionDigits)} g',
+          style: theme.textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.w800,
+            color: accent,
+          ),
+        ),
+      ],
+    );
+  }
+}
+

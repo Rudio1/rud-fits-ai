@@ -21,6 +21,30 @@ class DayMealLogItem {
   final double carbs;
   final double fat;
 
+  DayMealLogItem copyWith({
+    String? id,
+    String? foodId,
+    String? foodName,
+    int? quantity,
+    int? unitType,
+    int? calories,
+    double? protein,
+    double? carbs,
+    double? fat,
+  }) {
+    return DayMealLogItem(
+      id: id ?? this.id,
+      foodId: foodId ?? this.foodId,
+      foodName: foodName ?? this.foodName,
+      quantity: quantity ?? this.quantity,
+      unitType: unitType ?? this.unitType,
+      calories: calories ?? this.calories,
+      protein: protein ?? this.protein,
+      carbs: carbs ?? this.carbs,
+      fat: fat ?? this.fat,
+    );
+  }
+
   factory DayMealLogItem.fromJson(Map<String, dynamic> json) {
     return DayMealLogItem(
       id: json['id'] as String? ?? '',
@@ -64,6 +88,34 @@ class DayMealLogEntry {
   final List<DayMealLogItem> items;
 
   DateTime? get consumedAt => DateTime.tryParse(consumedAtRaw);
+
+  DayMealLogEntry copyWith({
+    String? id,
+    String? name,
+    int? mealType,
+    int? sourceType,
+    String? consumedAtRaw,
+    String? notes,
+    int? totalCalories,
+    double? totalProtein,
+    double? totalCarbs,
+    double? totalFat,
+    List<DayMealLogItem>? items,
+  }) {
+    return DayMealLogEntry(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      mealType: mealType ?? this.mealType,
+      sourceType: sourceType ?? this.sourceType,
+      consumedAtRaw: consumedAtRaw ?? this.consumedAtRaw,
+      notes: notes ?? this.notes,
+      totalCalories: totalCalories ?? this.totalCalories,
+      totalProtein: totalProtein ?? this.totalProtein,
+      totalCarbs: totalCarbs ?? this.totalCarbs,
+      totalFat: totalFat ?? this.totalFat,
+      items: items ?? this.items,
+    );
+  }
 
   factory DayMealLogEntry.fromJson(Map<String, dynamic> json) {
     final rawItems = json['items'] as List<dynamic>? ?? const [];

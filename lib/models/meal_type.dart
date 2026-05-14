@@ -1,5 +1,3 @@
-import 'package:flutter/material.dart';
-
 enum MealType {
   breakfast(1, 'Café da manhã'),
   lunch(2, 'Almoço'),
@@ -13,12 +11,19 @@ enum MealType {
   final int apiValue;
   final String labelPt;
 
-  IconData get icon => switch (this) {
-        MealType.breakfast => Icons.free_breakfast_rounded,
-        MealType.lunch => Icons.lunch_dining_rounded,
-        MealType.dinner => Icons.dinner_dining_rounded,
-        MealType.snack => Icons.cookie_rounded,
-        MealType.preWorkout => Icons.bolt_rounded,
-        MealType.postWorkout => Icons.fitness_center_rounded,
+  String get pickerLeadingAssetPath => switch (this) {
+        MealType.breakfast => 'public/images/cafe-da-manha.png',
+        MealType.lunch => 'public/images/almoco.png',
+        MealType.dinner => 'public/images/jantar.png',
+        MealType.snack => 'public/images/lanche.png',
+        MealType.preWorkout => 'public/images/pre-treino.png',
+        MealType.postWorkout => 'public/images/pos-treino.png',
       };
+
+  static MealType fromApiValue(int value) {
+    for (final t in MealType.values) {
+      if (t.apiValue == value) return t;
+    }
+    return MealType.snack;
+  }
 }

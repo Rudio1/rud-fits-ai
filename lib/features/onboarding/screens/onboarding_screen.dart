@@ -6,8 +6,11 @@ import 'package:flutter/services.dart';
 import 'package:rud_fits_ai/core/animations/app_transitions.dart';
 import 'package:rud_fits_ai/core/animations/motion_tokens.dart';
 import 'package:rud_fits_ai/core/haptics/app_haptics.dart';
+import 'package:rud_fits_ai/core/icons/app_icons.dart';
 import 'package:rud_fits_ai/features/onboarding/screens/goals_result_screen.dart';
+import 'package:rud_fits_ai/models/user_profile.dart';
 import 'package:rud_fits_ai/services/onboarding_api_service.dart';
+import 'package:rud_fits_ai/services/profile_api_service.dart';
 import 'package:rud_fits_ai/shared/formatters/auto_decimal_formatter.dart';
 import 'package:rud_fits_ai/themes/themes.dart';
 
@@ -22,7 +25,10 @@ enum _OnboardingStep {
 }
 
 class OnboardingScreen extends StatefulWidget {
-  const OnboardingScreen({super.key});
+  const OnboardingScreen({super.key, this.seedProfile, this.onRecalculateDone});
+
+  final UserProfile? seedProfile;
+  final VoidCallback? onRecalculateDone;
 
   @override
   State<OnboardingScreen> createState() => _OnboardingScreenState();
@@ -60,6 +66,24 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   void initState() {
     super.initState();
     _shakeController = AnimationController(vsync: this, duration: MotionTokens.normal);
+    final seed = widget.seedProfile;
+    if (seed != null) {
+      _applySeed(seed);
+    }
+  }
+
+  void _applySeed(UserProfile p) {
+    _goal = p.goal;
+    _gender = p.gender;
+    _activityLevel = p.activityLevel;
+    _dailyRoutineLevel = p.dailyRoutineLevel;
+    _goalIntensity = p.goalIntensity;
+    _ageController.text = '${p.age}';
+    final hM = p.height / 100.0;
+    _heightController.text =
+        hM.toStringAsFixed(2).replaceFirst('.', ',');
+    _weightController.text = '${p.weight}';
+    _targetWeightController.text = '${p.targetWeight}';
   }
 
   @override
@@ -153,8 +177,55 @@ class _OnboardingScreenState extends State<OnboardingScreen>
 
     final heightMeters =
         double.parse(_heightController.text.trim().replaceAll(',', '.'));
-    final currentWeight =
-        double.parse(_weightController.text.trim().replaceAll(',', '.'));
+    final currentWeight = double.parse(
+        _weightController.text.trim().replaceAll(',', '.'));
+    final targetWeight = double.parse(
+        _targetWeightController.text.trim().replaceAll(',', '.'));
+
+    final seed = widget.seedProfile;
+    if (seed != null) {
+      final result = await ProfileApiService.recalculateDailyGoals(
+        goal: _goal!,
+        gender: _gender!,
+        age: int.parse(_ageController.text.trim()),
+        height: (heightMeters * 100).round(),
+        weight: currentWeight.round(),
+        startingWeight: seed.startingWeight,
+        targetWeight: targetWeight.round(),
+        activityLevel: _activityLevel!,
+        dailyRoutineLevel: _dailyRoutineLevel!,
+        goalIntensity: _goalIntensity!,
+      );
+
+      if (!mounted) return;
+      setState(() => _busy = false);
+
+      if (result.ok) {
+        await AppHaptics.success();
+        if (!mounted) return;
+        Navigator.of(context).pushReplacement(
+          AppTransitions.fade(
+            page: GoalsResultScreen(
+              initialGoals: result.goals,
+              finishWithPop: true,
+              afterFinish: widget.onRecalculateDone,
+            ),
+          ),
+        );
+        return;
+      }
+
+      await AppHaptics.error();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            result.error ?? 'Não foi possível recalcular suas metas.',
+          ),
+        ),
+      );
+      return;
+    }
 
     final result = await OnboardingApiService.submit(
       goal: _goal!,
@@ -163,8 +234,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       height: heightMeters * 100,
       weight: currentWeight,
       startingWeight: currentWeight,
-      targetWeight: double.parse(
-          _targetWeightController.text.trim().replaceAll(',', '.')),
+      targetWeight: targetWeight,
       activityLevel: _activityLevel!,
       dailyRoutineLevel: _dailyRoutineLevel!,
       goalIntensity: _goalIntensity!,
@@ -229,6 +299,10 @@ class _OnboardingScreenState extends State<OnboardingScreen>
 
   void _back() {
     if (_busy) return;
+    if (_stepIndex == 0 && widget.seedProfile != null) {
+      Navigator.of(context).pop();
+      return;
+    }
     if (_stepIndex > 0) {
       setState(() {
         _errorMessage = null;
@@ -380,7 +454,7 @@ class _TopBar extends StatelessWidget {
             duration: MotionTokens.fast,
             child: IconButton(
               onPressed: showBack ? onBack : null,
-              icon: const Icon(Icons.arrow_back_ios_new_rounded),
+              icon: const Icon(AppIcons.caretLeft),
               color: AppColors.textSecondary,
             ),
           ),
@@ -623,7 +697,7 @@ class _SelectionTile extends StatelessWidget {
               opacity: _active ? 1.0 : 0.0,
               duration: MotionTokens.fast,
               child: const Icon(
-                Icons.check_circle_rounded,
+                AppIcons.checkCircle,
                 color: AppColors.primaryGreen,
                 size: 20,
               ),
@@ -695,28 +769,28 @@ class _GoalStep extends StatelessWidget {
               _SelectionCard(
                 value: 1,
                 label: 'Perder peso',
-                icon: Icons.trending_down_rounded,
+                icon: AppIcons.trendDown,
                 selected: selected,
                 onSelect: onSelect,
               ),
               _SelectionCard(
                 value: 2,
                 label: 'Ganhar músculo',
-                icon: Icons.fitness_center_rounded,
+                icon: AppIcons.barbell,
                 selected: selected,
                 onSelect: onSelect,
               ),
               _SelectionCard(
                 value: 3,
                 label: 'Manter peso',
-                icon: Icons.balance_rounded,
+                icon: AppIcons.scales,
                 selected: selected,
                 onSelect: onSelect,
               ),
               _SelectionCard(
                 value: 4,
                 label: 'Recomposição corporal',
-                icon: Icons.autorenew_rounded,
+                icon: AppIcons.arrowsClockwise,
                 selected: selected,
                 onSelect: onSelect,
               ),
@@ -767,21 +841,21 @@ class _GenderStep extends StatelessWidget {
               _SelectionCard(
                 value: 1,
                 label: 'Masculino',
-                icon: Icons.male_rounded,
+                icon: AppIcons.genderMale,
                 selected: selected,
                 onSelect: onSelect,
               ),
               _SelectionCard(
                 value: 2,
                 label: 'Feminino',
-                icon: Icons.female_rounded,
+                icon: AppIcons.genderFemale,
                 selected: selected,
                 onSelect: onSelect,
               ),
               _SelectionCard(
                 value: 3,
                 label: 'Outro',
-                icon: Icons.transgender_rounded,
+                icon: AppIcons.genderIntersex,
                 selected: selected,
                 onSelect: onSelect,
               ),
@@ -984,7 +1058,7 @@ class _ActivityLevelStep extends StatelessWidget {
             value: 1,
             label: 'Sedentário',
             sublabel: 'Pouco ou nenhum exercício',
-            icon: Icons.weekend_outlined,
+            icon: AppIcons.couch,
             selected: selected,
             onSelect: onSelect,
           ),
@@ -993,7 +1067,7 @@ class _ActivityLevelStep extends StatelessWidget {
             value: 2,
             label: 'Levemente ativo',
             sublabel: '1–3 dias de exercício por semana',
-            icon: Icons.directions_walk_rounded,
+            icon: AppIcons.personSimpleWalk,
             selected: selected,
             onSelect: onSelect,
           ),
@@ -1002,7 +1076,7 @@ class _ActivityLevelStep extends StatelessWidget {
             value: 3,
             label: 'Moderadamente ativo',
             sublabel: '3–5 dias de exercício por semana',
-            icon: Icons.directions_run_rounded,
+            icon: AppIcons.personSimpleRun,
             selected: selected,
             onSelect: onSelect,
           ),
@@ -1011,7 +1085,7 @@ class _ActivityLevelStep extends StatelessWidget {
             value: 4,
             label: 'Muito ativo',
             sublabel: '6–7 dias de exercício por semana',
-            icon: Icons.sports_rounded,
+            icon: AppIcons.basketball,
             selected: selected,
             onSelect: onSelect,
           ),
@@ -1020,7 +1094,7 @@ class _ActivityLevelStep extends StatelessWidget {
             value: 5,
             label: 'Atleta',
             sublabel: 'Exercício intenso diário',
-            icon: Icons.emoji_events_rounded,
+            icon: AppIcons.trophy,
             selected: selected,
             onSelect: onSelect,
           ),
@@ -1150,7 +1224,7 @@ class _RichSelectionCard extends StatelessWidget {
               opacity: _active ? 1.0 : 0.0,
               duration: MotionTokens.fast,
               child: const Icon(
-                Icons.check_circle_rounded,
+                AppIcons.checkCircle,
                 color: AppColors.primaryGreen,
                 size: 22,
               ),
@@ -1193,7 +1267,7 @@ class _DailyRoutineStep extends StatelessWidget {
             value: 1,
             title: 'Maioria do tempo sentado',
             description: 'Pouca movimentação ao longo do dia.',
-            icon: Icons.event_seat_rounded,
+            icon: AppIcons.seat,
             selected: selected,
             onSelect: onSelect,
             bullets: const ['Escritório', 'Home office', 'Estudo'],
@@ -1204,7 +1278,7 @@ class _DailyRoutineStep extends StatelessWidget {
             title: 'Caminho e me movimento algumas vezes',
             description:
                 'Levanto com frequência ou faço pequenos deslocamentos.',
-            icon: Icons.directions_walk_rounded,
+            icon: AppIcons.personSimpleWalk,
             selected: selected,
             onSelect: onSelect,
           ),
@@ -1214,7 +1288,7 @@ class _DailyRoutineStep extends StatelessWidget {
             title: 'Passo boa parte do dia em pé',
             description:
                 'Trabalho ou rotina exige ficar em pé constantemente.',
-            icon: Icons.airline_stops_rounded,
+            icon: AppIcons.path,
             selected: selected,
             onSelect: onSelect,
           ),
@@ -1223,7 +1297,7 @@ class _DailyRoutineStep extends StatelessWidget {
             value: 4,
             title: 'Faço esforço físico frequentemente',
             description: 'Atividades físicas exigentes como parte do dia.',
-            icon: Icons.engineering_rounded,
+            icon: AppIcons.hardHat,
             selected: selected,
             onSelect: onSelect,
           ),
@@ -1265,7 +1339,7 @@ class _GoalIntensityStep extends StatelessWidget {
             value: 1,
             title: 'Leve e sustentável',
             description: 'Mudanças graduais e mais fáceis de manter.',
-            icon: Icons.spa_rounded,
+            icon: AppIcons.leaf,
             selected: selected,
             onSelect: onSelect,
           ),
@@ -1274,7 +1348,7 @@ class _GoalIntensityStep extends StatelessWidget {
             value: 2,
             title: 'Equilibrado',
             description: 'Bom progresso mantendo equilíbrio.',
-            icon: Icons.balance_rounded,
+            icon: AppIcons.scales,
             selected: selected,
             onSelect: onSelect,
           ),
@@ -1283,7 +1357,7 @@ class _GoalIntensityStep extends StatelessWidget {
             value: 3,
             title: 'Mais intenso',
             description: 'Resultados mais rápidos com maior disciplina.',
-            icon: Icons.local_fire_department_rounded,
+            icon: AppIcons.flame,
             selected: selected,
             onSelect: onSelect,
           ),

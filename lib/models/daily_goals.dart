@@ -12,11 +12,13 @@ class DailyGoals {
   final int fat;
 
   factory DailyGoals.fromJson(Map<String, dynamic> json) {
+    int n(String key) => (json[key] as num).round();
+
     return DailyGoals(
-      calories: json['dailyCaloriesGoal'] as int,
-      protein: json['dailyProteinGoal'] as int,
-      carbs: json['dailyCarbsGoal'] as int,
-      fat: json['dailyFatGoal'] as int,
+      calories: n('dailyCaloriesGoal'),
+      protein: n('dailyProteinGoal'),
+      carbs: n('dailyCarbsGoal'),
+      fat: n('dailyFatGoal'),
     );
   }
 }

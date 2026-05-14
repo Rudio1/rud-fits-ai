@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import 'package:rud_fits_ai/core/icons/app_icons.dart';
 import 'package:rud_fits_ai/models/daily_goals.dart';
 import 'package:rud_fits_ai/themes/themes.dart';
 
@@ -152,7 +153,7 @@ class MacroCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(14),
@@ -161,8 +162,8 @@ class MacroCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 20, color: color),
-          const SizedBox(height: 10),
+          Icon(icon, size: 18, color: color),
+          const SizedBox(height: 8),
           Text(
             '${amount}g',
             style: theme.textTheme.titleMedium?.copyWith(
@@ -207,27 +208,27 @@ class MacroCardsRow extends StatelessWidget {
             amount: goals.protein,
             calPerGram: 4,
             color: AppColors.aiBlue,
-            icon: Icons.egg_alt_rounded,
+            icon: AppIcons.egg,
           ),
         ),
-        const SizedBox(width: 10),
+        const SizedBox(width: 8),
         Expanded(
           child: MacroCard(
             label: 'Carboidratos',
             amount: goals.carbs,
             calPerGram: 4,
             color: AppColors.warning,
-            icon: Icons.grain_rounded,
+            icon: AppIcons.grains,
           ),
         ),
-        const SizedBox(width: 10),
+        const SizedBox(width: 8),
         Expanded(
           child: MacroCard(
             label: 'Gordura',
             amount: goals.fat,
             calPerGram: 9,
             color: AppColors.error,
-            icon: Icons.water_drop_rounded,
+            icon: AppIcons.drop,
           ),
         ),
       ],

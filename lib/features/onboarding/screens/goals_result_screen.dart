@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:rud_fits_ai/core/animations/app_transitions.dart';
 import 'package:rud_fits_ai/core/animations/motion_tokens.dart';
 import 'package:rud_fits_ai/core/haptics/app_haptics.dart';
+import 'package:rud_fits_ai/core/icons/app_icons.dart';
 import 'package:rud_fits_ai/features/shell/main_shell_screen.dart';
 import 'package:rud_fits_ai/models/daily_goals.dart';
 import 'package:rud_fits_ai/services/daily_goals_api_service.dart';
@@ -10,7 +11,16 @@ import 'package:rud_fits_ai/themes/themes.dart';
 import 'package:rud_fits_ai/widgets/charts/macro_donut.dart';
 
 class GoalsResultScreen extends StatefulWidget {
-  const GoalsResultScreen({super.key});
+  const GoalsResultScreen({
+    super.key,
+    this.initialGoals,
+    this.finishWithPop = false,
+    this.afterFinish,
+  });
+
+  final DailyGoals? initialGoals;
+  final bool finishWithPop;
+  final VoidCallback? afterFinish;
 
   @override
   State<GoalsResultScreen> createState() => _GoalsResultScreenState();
@@ -24,7 +34,12 @@ class _GoalsResultScreenState extends State<GoalsResultScreen> {
   @override
   void initState() {
     super.initState();
-    _calculate();
+    if (widget.initialGoals != null) {
+      _goals = widget.initialGoals;
+      _loading = false;
+    } else {
+      _calculate();
+    }
   }
 
   Future<void> _calculate() async {
@@ -42,9 +57,14 @@ class _GoalsResultScreenState extends State<GoalsResultScreen> {
 
   void _goToHome() {
     AppHaptics.success();
-    Navigator.of(context).pushReplacement(
-      AppTransitions.fade(page: const MainShellScreen()),
-    );
+    if (widget.finishWithPop) {
+      Navigator.of(context).pop();
+      widget.afterFinish?.call();
+    } else {
+      Navigator.of(context).pushReplacement(
+        AppTransitions.fade(page: const MainShellScreen()),
+      );
+    }
   }
 
   @override
@@ -67,6 +87,7 @@ class _GoalsResultScreenState extends State<GoalsResultScreen> {
                       key: const ValueKey('results'),
                       goals: _goals!,
                       onStart: _goToHome,
+                      finishWithPop: widget.finishWithPop,
                     ),
         ),
       ),
@@ -97,7 +118,7 @@ class _LoadingView extends StatelessWidget {
                 ),
               ),
               child: const Icon(
-                Icons.insights_rounded,
+                AppIcons.chartLine,
                 color: AppColors.primaryGreen,
                 size: 32,
               ),
@@ -161,7 +182,7 @@ class _ErrorView extends StatelessWidget {
                 color: AppColors.error.withValues(alpha: 0.1),
               ),
               child: const Icon(
-                Icons.wifi_off_rounded,
+                AppIcons.wifiSlash,
                 color: AppColors.error,
                 size: 32,
               ),
@@ -206,14 +227,20 @@ class _ResultsView extends StatelessWidget {
     super.key,
     required this.goals,
     required this.onStart,
+    required this.finishWithPop,
   });
 
   final DailyGoals goals;
   final VoidCallback onStart;
+  final bool finishWithPop;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+
+    final footnote = finishWithPop
+        ? 'Suas metas diárias foram atualizadas. Na página inicial você já verá os novos valores ao atualizar.'
+        : 'Valores calculados com base no seu peso, altura, objetivo e nível de atividade. Você pode ajustá-los nas configurações a qualquer momento.';
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(24, 24, 24, 40),
@@ -221,7 +248,9 @@ class _ResultsView extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'Seu plano\nestá pronto!',
+            finishWithPop
+                ? 'Metas\natualizadas!'
+                : 'Seu plano\nestá pronto!',
             style: theme.textTheme.headlineMedium?.copyWith(
               fontWeight: FontWeight.w700,
               height: 1.2,
@@ -229,7 +258,9 @@ class _ResultsView extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            'Calculamos tudo com base no seu perfil.',
+            finishWithPop
+                ? 'Recalculamos calorias e macros com os dados que você confirmou.'
+                : 'Calculamos tudo com base no seu perfil.',
             style: theme.textTheme.bodyLarge?.copyWith(
               color: AppColors.textSecondary,
             ),
@@ -252,14 +283,14 @@ class _ResultsView extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Icon(
-                  Icons.info_outline_rounded,
+                  AppIcons.info,
                   size: 18,
                   color: AppColors.textSecondary,
                 ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    'Valores calculados com base no seu peso, altura, objetivo e nível de atividade. Você pode ajustá-los nas configurações a qualquer momento.',
+                    footnote,
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: AppColors.textSecondary,
                       height: 1.55,
@@ -272,7 +303,7 @@ class _ResultsView extends StatelessWidget {
           const SizedBox(height: 36),
           ElevatedButton(
             onPressed: onStart,
-            child: const Text('Começar minha jornada'),
+            child: Text(finishWithPop ? 'Voltar ao app' : 'Começar minha jornada'),
           ),
         ],
       ),

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
+import 'package:rud_fits_ai/core/icons/app_icons.dart';
 import 'package:rud_fits_ai/features/home/screens/home_screen.dart';
 import 'package:rud_fits_ai/features/meal_logs/screens/daily_meals_screen.dart';
+import 'package:rud_fits_ai/features/profile/screens/profile_screen.dart';
 
 class MainShellScreen extends StatefulWidget {
   const MainShellScreen({super.key, this.initialIndex = 0});
@@ -19,7 +21,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
   @override
   void initState() {
     super.initState();
-    _index = widget.initialIndex.clamp(0, 1);
+    _index = widget.initialIndex.clamp(0, 2);
   }
 
   @override
@@ -30,6 +32,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
         children: [
           const HomeScreen(),
           DailyMealsScreen(refreshToken: _mealsRefreshToken),
+          const ProfileScreen(),
         ],
       ),
       bottomNavigationBar: NavigationBar(
@@ -45,14 +48,19 @@ class _MainShellScreenState extends State<MainShellScreen> {
         },
         destinations: const [
           NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home_rounded),
+            icon: Icon(AppIcons.navHome),
+            selectedIcon: Icon(AppIcons.navHomeActive),
             label: 'Início',
           ),
           NavigationDestination(
-            icon: Icon(Icons.restaurant_menu_outlined),
-            selectedIcon: Icon(Icons.restaurant_menu_rounded),
+            icon: Icon(AppIcons.navMeals),
+            selectedIcon: Icon(AppIcons.navMealsActive),
             label: 'Refeições',
+          ),
+          NavigationDestination(
+            icon: Icon(AppIcons.navProfile),
+            selectedIcon: Icon(AppIcons.navProfileActive),
+            label: 'Perfil',
           ),
         ],
       ),

@@ -1,162 +1,183 @@
-import 'dart:ui';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 
 import 'package:rud_fits_ai/core/animations/motion_tokens.dart';
 import 'package:rud_fits_ai/themes/themes.dart';
 
-class AnalyzingOverlay extends StatefulWidget {
-  const AnalyzingOverlay({super.key});
+class AiMealPhotoScanOverlay extends StatefulWidget {
+  const AiMealPhotoScanOverlay({super.key, required this.imageFile});
+
+  final File imageFile;
 
   @override
-  State<AnalyzingOverlay> createState() => _AnalyzingOverlayState();
+  State<AiMealPhotoScanOverlay> createState() => _AiMealPhotoScanOverlayState();
 }
 
-class _AnalyzingOverlayState extends State<AnalyzingOverlay>
-    with TickerProviderStateMixin {
-  static const _steps = [
-    'Detectando alimentos...',
-    'Estimando quantidades...',
-    'Calculando calorias e macros...',
-  ];
-
-  int _currentStep = 0;
-  late final AnimationController _pulse;
+class _AiMealPhotoScanOverlayState extends State<AiMealPhotoScanOverlay>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _scan;
+  late final Animation<double> _scanCurve;
 
   @override
   void initState() {
     super.initState();
-    _pulse = AnimationController(
+    _scan = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1200),
-    )..repeat(reverse: true);
-    _cycleSteps();
-  }
-
-  Future<void> _cycleSteps() async {
-    for (var i = 1; i < _steps.length; i++) {
-      await Future.delayed(const Duration(milliseconds: 1400));
-      if (!mounted) return;
-      setState(() => _currentStep = i);
-    }
+      duration: const Duration(milliseconds: 2600),
+    )..repeat();
+    _scanCurve = CurvedAnimation(
+      parent: _scan,
+      curve: MotionTokens.inOut,
+    );
   }
 
   @override
   void dispose() {
-    _pulse.dispose();
+    _scan.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-
-    return Positioned.fill(
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-        child: Container(
-          color: Colors.black.withValues(alpha: 0.55),
-          child: Center(
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        Image.file(
+          widget.imageFile,
+          fit: BoxFit.cover,
+          width: double.infinity,
+          height: double.infinity,
+          alignment: Alignment.center,
+          filterQuality: FilterQuality.medium,
+        ),
+        DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Colors.black.withValues(alpha: 0.35),
+                Colors.black.withValues(alpha: 0.12),
+                Colors.black.withValues(alpha: 0.28),
+              ],
+              stops: const [0.0, 0.5, 1.0],
+            ),
+          ),
+        ),
+        ClipRect(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final h = constraints.maxHeight;
+              final w = constraints.maxWidth;
+              const bandH = 112.0;
+              return AnimatedBuilder(
+                animation: _scanCurve,
+                builder: (context, child) {
+                  final t = _scanCurve.value;
+                  final top = t * (h + bandH) - bandH * 0.65;
+                  return Stack(
+                    clipBehavior: Clip.hardEdge,
+                    children: [
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        top: top,
+                        height: bandH,
+                        child: CustomPaint(
+                          size: Size(w, bandH),
+                          painter: const _ScanBeamPainter(),
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              );
+            },
+          ),
+        ),
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 0,
+          child: SafeArea(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 32),
+              padding: const EdgeInsets.fromLTRB(28, 16, 28, 20),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  AnimatedBuilder(
-                    animation: _pulse,
-                    builder: (context, _) {
-                      final scale = 0.92 + (_pulse.value * 0.12);
-                      return Transform.scale(
-                        scale: scale,
-                        child: Container(
-                          width: 96,
-                          height: 96,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: AppColors.primaryGreen.withValues(alpha: 0.12),
-                            border: Border.all(
-                              color: AppColors.primaryGreen
-                                  .withValues(alpha: 0.6),
-                              width: 2,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: AppColors.primaryGreen
-                                    .withValues(alpha: 0.25 + _pulse.value * 0.25),
-                                blurRadius: 24,
-                                spreadRadius: 4,
-                              ),
-                            ],
-                          ),
-                          child: const Icon(
-                            Icons.auto_awesome_rounded,
-                            color: AppColors.primaryGreen,
-                            size: 36,
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 28),
-                  AnimatedSwitcher(
-                    duration: MotionTokens.medium,
-                    transitionBuilder: (child, animation) {
-                      return FadeTransition(
-                        opacity: animation,
-                        child: SlideTransition(
-                          position: Tween<Offset>(
-                            begin: const Offset(0, 0.2),
-                            end: Offset.zero,
-                          ).animate(animation),
-                          child: child,
-                        ),
-                      );
-                    },
-                    child: Text(
-                      _steps[_currentStep],
-                      key: ValueKey(_currentStep),
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(2),
+                    child: const SizedBox(
+                      width: 140,
+                      height: 3,
+                      child: LinearProgressIndicator(
+                        minHeight: 3,
+                        backgroundColor: Colors.white24,
+                        color: AppColors.primaryGreen,
                       ),
                     ),
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 14),
                   Text(
-                    'A IA está trabalhando na sua refeição',
+                    'Analisando foto…',
                     textAlign: TextAlign.center,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: Colors.white.withValues(alpha: 0.7),
+                    style: theme.textTheme.labelLarge?.copyWith(
+                      color: Colors.white.withValues(alpha: 0.88),
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.3,
                     ),
-                  ),
-                  const SizedBox(height: 28),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: List.generate(_steps.length, (i) {
-                      final active = i <= _currentStep;
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 3),
-                        child: AnimatedContainer(
-                          duration: MotionTokens.normal,
-                          width: active ? 20 : 6,
-                          height: 6,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(3),
-                            color: active
-                                ? AppColors.primaryGreen
-                                : Colors.white.withValues(alpha: 0.25),
-                          ),
-                        ),
-                      );
-                    }),
                   ),
                 ],
               ),
             ),
           ),
         ),
-      ),
+      ],
     );
   }
+}
+
+class _ScanBeamPainter extends CustomPainter {
+  const _ScanBeamPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    final glow = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          Colors.transparent,
+          AppColors.primaryGreen.withValues(alpha: 0.08),
+          AppColors.primaryGreen.withValues(alpha: 0.38),
+          AppColors.primaryGreen.withValues(alpha: 0.08),
+          Colors.transparent,
+        ],
+        stops: const [0.0, 0.38, 0.5, 0.62, 1.0],
+      ).createShader(rect);
+    canvas.drawRect(rect, glow);
+
+    const coreH = 3.0;
+    final cy = size.height / 2 - coreH / 2;
+    final coreRect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(0, cy, size.width, coreH),
+      const Radius.circular(1.5),
+    );
+    canvas.drawRRect(
+      coreRect,
+      Paint()
+        ..color = Colors.white.withValues(alpha: 0.75)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
+    );
+    canvas.drawRRect(
+      coreRect,
+      Paint()..color = AppColors.primaryGreen.withValues(alpha: 0.92),
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

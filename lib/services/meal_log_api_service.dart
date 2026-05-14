@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:rud_fits_ai/core/api_config.dart';
 import 'package:rud_fits_ai/core/auth_session.dart';
 import 'package:rud_fits_ai/models/analyzed_meal.dart';
+import 'package:rud_fits_ai/models/daily_consumption_summary.dart';
 import 'package:rud_fits_ai/models/day_meal_log.dart';
 import 'package:rud_fits_ai/models/saved_meal_log.dart';
 
@@ -54,7 +55,81 @@ final class DayMealLogsResult {
       DayMealLogsResult._(error: error);
 }
 
+final class UpdateMealLogResult {
+  const UpdateMealLogResult._({this.meal, this.error});
+
+  final DayMealLogEntry? meal;
+  final String? error;
+
+  bool get ok => meal != null;
+
+  static UpdateMealLogResult success(DayMealLogEntry meal) =>
+      UpdateMealLogResult._(meal: meal);
+
+  static UpdateMealLogResult failure(String error) =>
+      UpdateMealLogResult._(error: error);
+}
+
+final class DailySummaryResult {
+  const DailySummaryResult._({this.summary, this.error});
+
+  final DailyConsumptionSummary? summary;
+  final String? error;
+
+  bool get ok => summary != null;
+
+  static DailySummaryResult success(DailyConsumptionSummary summary) =>
+      DailySummaryResult._(summary: summary);
+
+  static DailySummaryResult failure(String error) =>
+      DailySummaryResult._(error: error);
+}
+
 abstract final class MealLogApiService {
+  static String? _extractErrorMessage(http.Response response) {
+    final raw = response.body.trim();
+    if (raw.isEmpty) return null;
+
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map<String, dynamic>) {
+        final message =
+            decoded['message'] as String? ??
+            decoded['title'] as String? ??
+            decoded['detail'] as String?;
+        if (message != null && message.trim().isNotEmpty) {
+          return message.trim();
+        }
+
+        final errors = decoded['errors'];
+        if (errors is Map<String, dynamic>) {
+          final parts = <String>[];
+          for (final entry in errors.entries) {
+            final value = entry.value;
+            if (value is List) {
+              for (final item in value) {
+                final text = item?.toString().trim();
+                if (text != null && text.isNotEmpty) {
+                  parts.add(text);
+                }
+              }
+            } else {
+              final text = value?.toString().trim();
+              if (text != null && text.isNotEmpty) {
+                parts.add(text);
+              }
+            }
+          }
+          if (parts.isNotEmpty) {
+            return parts.join(' ');
+          }
+        }
+      }
+    } catch (_) {}
+
+    return raw;
+  }
+
   static Map<String, String> _jsonHeaders() {
     final headers = <String, String>{
       'Content-Type': 'application/json',
@@ -128,7 +203,11 @@ abstract final class MealLogApiService {
         '${ApiConfig.baseUrl}/meal-logs/estimate-detected-foods-nutrition',
       );
       final body = jsonEncode(meal.toEstimateRequestJson());
-      final response = await http.post(uri, headers: _jsonHeaders(), body: body);
+      final response = await http.post(
+        uri,
+        headers: _jsonHeaders(),
+        body: body,
+      );
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
         final json = jsonDecode(response.body) as Map<String, dynamic>;
@@ -166,8 +245,9 @@ abstract final class MealLogApiService {
           'Faça login para registrar a refeição.',
         );
       }
-      final uri =
-          Uri.parse('${ApiConfig.baseUrl}/meal-logs/from-detected-foods');
+      final uri = Uri.parse(
+        '${ApiConfig.baseUrl}/meal-logs/from-detected-foods',
+      );
       final payload = {
         'mealType': mealType,
         'consumedAtUtc': consumedAtUtc.toUtc().toIso8601String(),
@@ -212,16 +292,50 @@ abstract final class MealLogApiService {
     return '$y-$m-$d';
   }
 
+  static Future<DailySummaryResult> fetchDailySummary(DateTime date) async {
+    try {
+      if (AuthSession.token == null) {
+        return DailySummaryResult.failure(
+          'Faça login para ver seu consumo do dia.',
+        );
+      }
+      final uri = Uri.parse(
+        '${ApiConfig.baseUrl}/meal-logs/daily-summary',
+      ).replace(queryParameters: {'date': _dateQueryParam(date)});
+      final response = await http.get(uri, headers: _jsonHeaders());
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        final decoded = jsonDecode(response.body);
+        if (decoded is! Map<String, dynamic>) {
+          return DailySummaryResult.failure('Resposta inválida do servidor.');
+        }
+        return DailySummaryResult.success(
+          DailyConsumptionSummary.fromJson(decoded),
+        );
+      }
+
+      return DailySummaryResult.failure(
+        'Não foi possível carregar o resumo do dia (${response.statusCode}).',
+      );
+    } catch (e) {
+      final text = e.toString();
+      if (_isNetworkError(text)) {
+        return DailySummaryResult.failure(
+          'Sem conexão com o servidor. Verifique sua internet.',
+        );
+      }
+      return DailySummaryResult.failure('Erro ao carregar o resumo do dia.');
+    }
+  }
+
   static Future<DayMealLogsResult> fetchLogsForDate(DateTime date) async {
     try {
       if (AuthSession.token == null) {
-        return DayMealLogsResult.failure(
-          'Faça login para ver suas refeições.',
-        );
+        return DayMealLogsResult.failure('Faça login para ver suas refeições.');
       }
-      final uri = Uri.parse('${ApiConfig.baseUrl}/meal-logs').replace(
-        queryParameters: {'date': _dateQueryParam(date)},
-      );
+      final uri = Uri.parse(
+        '${ApiConfig.baseUrl}/meal-logs',
+      ).replace(queryParameters: {'date': _dateQueryParam(date)});
       final response = await http.get(uri, headers: _jsonHeaders());
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
@@ -246,6 +360,73 @@ abstract final class MealLogApiService {
         );
       }
       return DayMealLogsResult.failure('Erro ao carregar as refeições.');
+    }
+  }
+
+  static Future<UpdateMealLogResult> updateMealLog({
+    required String mealLogId,
+    required int mealType,
+    required List<Map<String, dynamic>> items,
+    required DayMealLogEntry previous,
+  }) async {
+    try {
+      if (AuthSession.token == null) {
+        return UpdateMealLogResult.failure(
+          'Faça login para editar a refeição.',
+        );
+      }
+      final uri = Uri.parse('${ApiConfig.baseUrl}/meal-logs/$mealLogId');
+      final payload = <String, dynamic>{'mealType': mealType, 'items': items};
+      final response = await http.put(
+        uri,
+        headers: _jsonHeaders(),
+        body: jsonEncode(payload),
+      );
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        final raw = response.body.trim();
+        if (raw.isEmpty) {
+          final day = previous.consumedAt ?? DateTime.now();
+          final logsResult = await fetchLogsForDate(day);
+          if (!logsResult.ok || logsResult.logs == null) {
+            return UpdateMealLogResult.failure(
+              'Alterações salvas, mas não foi possível recarregar a refeição.',
+            );
+          }
+          DayMealLogEntry? found;
+          for (final e in logsResult.logs!) {
+            if (e.id == mealLogId) {
+              found = e;
+              break;
+            }
+          }
+          if (found == null) {
+            return UpdateMealLogResult.failure(
+              'Alterações salvas, mas a refeição não apareceu na lista do dia.',
+            );
+          }
+          return UpdateMealLogResult.success(found);
+        }
+        final decoded = jsonDecode(raw);
+        if (decoded is! Map<String, dynamic>) {
+          return UpdateMealLogResult.failure('Resposta inválida do servidor.');
+        }
+        return UpdateMealLogResult.success(DayMealLogEntry.fromJson(decoded));
+      }
+
+      final errorMessage = _extractErrorMessage(response);
+      return UpdateMealLogResult.failure(
+        errorMessage ??
+            'Não foi possível salvar as alterações (${response.statusCode}).',
+      );
+    } catch (e) {
+      final text = e.toString();
+      if (_isNetworkError(text)) {
+        return UpdateMealLogResult.failure(
+          'Sem conexão com o servidor. Verifique sua internet.',
+        );
+      }
+      return UpdateMealLogResult.failure('Erro ao salvar as alterações.');
     }
   }
 }

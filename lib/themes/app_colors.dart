@@ -12,6 +12,17 @@ abstract final class AppColors {
 
   static const Color aiBlue = Color(0xFF4F8CFF);
 
+  static const Color accentSurface = Color(0xFF6B8499);
+  static const Color accentSurfaceDeep = Color(0xFF4A5F72);
+  static const Color accentSurfaceMuted = Color(0xFF8FA3B3);
+  static const Color accentSage = Color(0xFF6F8B84);
+
+  static const Color mealsSummaryAccent = Color(0xFF818CF8);
+  static const Color mealsSummaryDeep = Color(0xFF6366F1);
+  static const Color mealsAiRegistrarAccent = Color(0xFF2DD4BF);
+  static const Color mealsAiRegistrarDeep = Color(0xFF0F766E);
+  static const Color mealsAiRegistrarMuted = Color(0xFF5EEAD4);
+
   static const Color textPrimary = Color(0xFFFFFFFF);
   static const Color textSecondary = Color(0xFFB6C2CF);
   static const Color textDisabled = Color(0xFF6B7280);

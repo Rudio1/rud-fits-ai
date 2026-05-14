@@ -31,14 +31,20 @@ final class AuthRequestResult {
     final ok = response.statusCode >= 200 && response.statusCode < 300;
     String? msg;
     if (!ok) {
-      msg = json?['message'] as String? ??
+      msg =
+          json?['message'] as String? ??
           json?['title'] as String? ??
           json?['detail'] as String? ??
           (json?.values.isNotEmpty == true ? response.body : null) ??
           'Erro ${response.statusCode}';
     }
 
-    return AuthRequestResult(ok: ok, statusCode: response.statusCode, message: msg, body: json);
+    return AuthRequestResult(
+      ok: ok,
+      statusCode: response.statusCode,
+      message: msg,
+      body: json,
+    );
   }
 
   static AuthRequestResult fromException(Object e, StackTrace st) {
@@ -52,7 +58,7 @@ final class AuthRequestResult {
         ok: false,
         statusCode: 0,
         message:
-            'Sem conexão com a API (${ApiConfig.baseUrl}). Em emulador Android use 10.0.2.2 no lugar de localhost; no celular use o IP da máquina.',
+            'Sem conexão com a API (${ApiConfig.baseUrl})',
       );
     }
     return AuthRequestResult(ok: false, statusCode: 0, message: text);
@@ -93,10 +99,7 @@ abstract final class AuthApiService {
       final response = await http.post(
         _uri('/Auth/login'),
         headers: {'Content-Type': 'application/json; charset=utf-8'},
-        body: jsonEncode({
-          'email': email,
-          'password': password,
-        }),
+        body: jsonEncode({'email': email, 'password': password}),
       );
       return AuthRequestResult.fromResponse(response);
     } catch (e, st) {

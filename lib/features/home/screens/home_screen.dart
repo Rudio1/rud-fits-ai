@@ -5,10 +5,13 @@ import 'package:rud_fits_ai/core/animations/motion_tokens.dart';
 import 'package:rud_fits_ai/core/auth_session.dart';
 import 'package:rud_fits_ai/core/calendar_today.dart';
 import 'package:rud_fits_ai/core/haptics/app_haptics.dart';
+import 'package:rud_fits_ai/core/icons/app_icons.dart';
 import 'package:rud_fits_ai/features/auth/screens/login_screen.dart';
-import 'package:rud_fits_ai/features/scanner/screens/scanner_screen.dart';
+import 'package:rud_fits_ai/features/home/widgets/daily_goal_progress_section.dart';
+import 'package:rud_fits_ai/models/daily_consumption_summary.dart';
 import 'package:rud_fits_ai/models/daily_goals.dart';
 import 'package:rud_fits_ai/services/daily_goals_api_service.dart';
+import 'package:rud_fits_ai/services/meal_log_api_service.dart';
 import 'package:rud_fits_ai/themes/themes.dart';
 import 'package:rud_fits_ai/widgets/charts/macro_donut.dart';
 
@@ -21,6 +24,8 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   DailyGoals? _goals;
+  DailyConsumptionSummary? _summary;
+  String? _summaryError;
   String? _error;
   bool _loading = true;
 
@@ -32,21 +37,39 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _fetch() async {
     if (!_loading) setState(() => _loading = true);
-    final result = await DailyGoalsApiService.fetch();
+    final day = CalendarToday.dateOnlyLocal();
+    final results = await Future.wait([
+      DailyGoalsApiService.fetch(),
+      MealLogApiService.fetchDailySummary(day),
+    ]);
     if (!mounted) return;
+    final goalsResult = results[0] as DailyGoalsResult;
+    final summaryResult = results[1] as DailySummaryResult;
     setState(() {
-      _goals = result.goals;
-      _error = result.error;
+      _goals = goalsResult.goals;
+      _error = goalsResult.goals == null ? goalsResult.error : null;
+      _summary = summaryResult.summary;
+      _summaryError =
+          summaryResult.summary == null ? summaryResult.error : null;
       _loading = false;
     });
   }
 
   Future<void> _refresh() async {
-    final result = await DailyGoalsApiService.fetch();
+    final day = CalendarToday.dateOnlyLocal();
+    final results = await Future.wait([
+      DailyGoalsApiService.fetch(),
+      MealLogApiService.fetchDailySummary(day),
+    ]);
     if (!mounted) return;
+    final goalsResult = results[0] as DailyGoalsResult;
+    final summaryResult = results[1] as DailySummaryResult;
     setState(() {
-      _goals = result.goals;
-      _error = result.error;
+      _goals = goalsResult.goals;
+      _error = goalsResult.goals == null ? goalsResult.error : null;
+      _summary = summaryResult.summary;
+      _summaryError =
+          summaryResult.summary == null ? summaryResult.error : null;
     });
   }
 
@@ -57,14 +80,6 @@ class _HomeScreenState extends State<HomeScreen> {
       AppTransitions.fade(page: const LoginScreen()),
       (_) => false,
     );
-  }
-
-  Future<void> _openScanner() async {
-    AppHaptics.selection();
-    await Navigator.of(context).push(
-      AppTransitions.slideFromRight(page: const ScannerScreen()),
-    );
-    if (mounted) await _refresh();
   }
 
   String get _greeting {
@@ -138,10 +153,11 @@ class _HomeScreenState extends State<HomeScreen> {
     return _ContentView(
       key: const ValueKey('content'),
       goals: _goals!,
+      summary: _summary,
+      summaryError: _summaryError,
       greeting: _greeting,
       today: _today,
       onLogout: _logout,
-      onAddMeal: _openScanner,
     );
   }
 }
@@ -150,17 +166,19 @@ class _ContentView extends StatelessWidget {
   const _ContentView({
     super.key,
     required this.goals,
+    this.summary,
+    this.summaryError,
     required this.greeting,
     required this.today,
     required this.onLogout,
-    required this.onAddMeal,
   });
 
   final DailyGoals goals;
+  final DailyConsumptionSummary? summary;
+  final String? summaryError;
   final String greeting;
   final String today;
   final VoidCallback onLogout;
-  final VoidCallback onAddMeal;
 
   @override
   Widget build(BuildContext context) {
@@ -193,16 +211,18 @@ class _ContentView extends StatelessWidget {
             ),
             IconButton(
               onPressed: onLogout,
-              icon: const Icon(Icons.logout_rounded),
+              icon: const Icon(AppIcons.signOut),
               color: AppColors.textSecondary,
               tooltip: 'Sair',
             ),
           ],
         ),
         const SizedBox(height: 24),
-        _AddMealCard(onTap: onAddMeal),
-        const SizedBox(height: 16),
-        _GoalsCard(goals: goals),
+        _GoalsCard(
+          goals: goals,
+          summary: summary,
+          summaryError: summaryError,
+        ),
         const SizedBox(height: 16),
         _GoalsExplanationCard(goals: goals),
       ],
@@ -210,133 +230,23 @@ class _ContentView extends StatelessWidget {
   }
 }
 
-class _AddMealCard extends StatelessWidget {
-  const _AddMealCard({required this.onTap});
-
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
-        child: Ink(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                AppColors.primaryGreen.withValues(alpha: 0.18),
-                AppColors.premiumGreen.withValues(alpha: 0.08),
-              ],
-            ),
-            border: Border.all(
-              color: AppColors.primaryGreen.withValues(alpha: 0.35),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.primaryGreen.withValues(alpha: 0.15),
-                blurRadius: 24,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(18),
-            child: Row(
-              children: [
-                Container(
-                  width: 52,
-                  height: 52,
-                  decoration: BoxDecoration(
-                    color: AppColors.primaryGreen.withValues(alpha: 0.18),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                      color: AppColors.primaryGreen.withValues(alpha: 0.4),
-                    ),
-                  ),
-                  child: const Icon(
-                    Icons.photo_camera_rounded,
-                    color: AppColors.primaryGreen,
-                    size: 26,
-                  ),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Text(
-                            'Adicionar refeição',
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: AppColors.aiBlue.withValues(alpha: 0.2),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              'IA',
-                              style: theme.textTheme.labelSmall?.copyWith(
-                                color: AppColors.aiBlue,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 0.5,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Tire uma foto e a IA detecta os alimentos para você.',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: AppColors.textSecondary,
-                          height: 1.4,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 4),
-                const Icon(
-                  Icons.arrow_forward_ios_rounded,
-                  size: 14,
-                  color: AppColors.textSecondary,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _GoalsCard extends StatelessWidget {
-  const _GoalsCard({required this.goals});
+  const _GoalsCard({
+    required this.goals,
+    this.summary,
+    this.summaryError,
+  });
 
   final DailyGoals goals;
+  final DailyConsumptionSummary? summary;
+  final String? summaryError;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
+      padding: const EdgeInsets.fromLTRB(16, 18, 16, 16),
       decoration: BoxDecoration(
         color: AppColors.card,
         borderRadius: BorderRadius.circular(20),
@@ -348,15 +258,15 @@ class _GoalsCard extends StatelessWidget {
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(8),
+                padding: const EdgeInsets.all(7),
                 decoration: BoxDecoration(
                   color: AppColors.primaryGreen.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: const Icon(
-                  Icons.local_fire_department_rounded,
+                  AppIcons.flame,
                   color: AppColors.primaryGreen,
-                  size: 18,
+                  size: 17,
                 ),
               ),
               const SizedBox(width: 10),
@@ -368,11 +278,28 @@ class _GoalsCard extends StatelessWidget {
               ),
             ],
           ),
+          const SizedBox(height: 14),
+          DailyGoalProgressSection(
+            goals: goals,
+            summary: summary,
+            summaryError: summaryError,
+          ),
+          const SizedBox(height: 14),
+          Divider(
+            height: 1,
+            color: AppColors.borderDefault.withValues(alpha: 0.85),
+          ),
+          const SizedBox(height: 14),
+          Center(
+            child: MacroDonut(
+              goals: goals,
+              size: 168,
+              strokeWidth: 18,
+            ),
+          ),
           const SizedBox(height: 8),
-          Center(child: MacroDonut(goals: goals)),
-          const SizedBox(height: 12),
           MacroLegend(goals: goals),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
           MacroCardsRow(goals: goals),
         ],
       ),
@@ -402,7 +329,7 @@ class _GoalsExplanationCard extends StatelessWidget {
           Row(
             children: [
               const Icon(
-                Icons.lightbulb_outline_rounded,
+                AppIcons.lightbulb,
                 size: 18,
                 color: AppColors.lightGreen,
               ),
@@ -496,7 +423,7 @@ class _ErrorView extends StatelessWidget {
                       color: AppColors.error.withValues(alpha: 0.1),
                     ),
                     child: const Icon(
-                      Icons.wifi_off_rounded,
+                      AppIcons.wifiSlash,
                       color: AppColors.error,
                       size: 28,
                     ),
@@ -520,7 +447,7 @@ class _ErrorView extends StatelessWidget {
                   const SizedBox(height: 24),
                   ElevatedButton.icon(
                     onPressed: onRetry,
-                    icon: const Icon(Icons.refresh_rounded, size: 18),
+                    icon: const Icon(AppIcons.arrowClockwise, size: 18),
                     label: const Text('Tentar novamente'),
                   ),
                 ],
